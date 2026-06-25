@@ -1,0 +1,14 @@
+# =====================================================
+# api/.htaccess — インクルード専用ファイルへの直接アクセスを禁止
+# generate.php（エンドポイント）のみブラウザから到達可能にする。
+# =====================================================
+
+# config / インクルード専用ファイルを直接 URL で開けないようにする
+<FilesMatch "^(config|config\.example|cors|helpers|font-catalog)\.php$">
+    Require all denied
+</FilesMatch>
+
+# .htaccess 自体へのアクセスも禁止
+<FilesMatch "^\.htaccess$">
+    Require all denied
+</FilesMatch>

@@ -1,0 +1,10 @@
+# =====================================================
+# .htaccess（ルート）
+# ★ テスト公開中：検索エンジンにインデックスさせない。
+#    本番公開時に X-Robots-Tag の行を削除する。
+# =====================================================
+
+# 全レスポンスに noindex を付与（HTML以外のファイルにも効く）
+<IfModule mod_headers.c>
+    Header set X-Robots-Tag "noindex, nofollow, noarchive"
+</IfModule>

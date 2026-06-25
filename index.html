@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- ★ テスト公開中：検索エンジンにインデックスさせない。本番公開時に削除する。 -->
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>いろは — AI配色 &amp; タイポジェネレーター</title>
+
+  <!-- 1. Google Fonts（表示用・キー不要） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Space+Mono:wght@400;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;700&family=Shippori+Mincho:wght@400;700;800&family=M+PLUS+Rounded+1c:wght@400;700;800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cormorant+Garamond:wght@400;600&display=swap" rel="stylesheet">
+
+  <!-- 2. 自分のCSS -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- 3. React / Babel CDN -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+
+  <!-- 4. APIキー（config.js）→ app.js より必ず先に読む -->
+  <script src="js/config.example.js"></script>
+
+  <!-- 5. フォントデータ（FONT_LIST）→ app.js より先に読む -->
+  <script src="js/font-list.js"></script>
+
+  <!-- 6. ロジック（JSX なし・通常 script） -->
+  <script src="js/logic.js"></script>
+
+  <!-- 7. UIコンポーネント（JSX） -->
+  <script type="text/babel" src="js/app.js"></script>
+</body>
+</html>

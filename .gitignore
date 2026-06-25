@@ -1,0 +1,9 @@
+# APIキー・設定ファイル（絶対にコミットしない）
+api/config.php
+js/config.js
+
+# OS・エディタ生成ファイル
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
