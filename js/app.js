@@ -412,6 +412,61 @@ function FavWorkspace({favState, favDispatch, purpose, showToast}) {
   );
 }
 
+// ── AuthModal コンポーネント ──────────────────────────
+function AuthModal({onClose, onAuth}) {
+  const [mode, setMode] = useState("login");   // "login" | "register"
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setErr("");
+    if (!name.trim()) { setErr("名前を入力してください。"); return; }
+    if (password.length < 6) { setErr("パスワードは6文字以上です。"); return; }
+    setBusy(true);
+    try {
+      await onAuth(mode, name.trim(), password);
+      // 成功時は親がモーダルを閉じる
+    } catch(ex) {
+      setErr(ex.message || "処理に失敗しました。");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="auth-overlay" onClick={onClose}>
+      <div className="auth-modal" onClick={e=>e.stopPropagation()}>
+        <button className="auth-close" onClick={onClose} aria-label="閉じる">✕</button>
+        <div className="auth-tabs">
+          <button className={`auth-tab${mode==="login"?" active":""}`}
+            onClick={()=>{setMode("login");setErr("");}}>ログイン</button>
+          <button className={`auth-tab${mode==="register"?" active":""}`}
+            onClick={()=>{setMode("register");setErr("");}}>新規登録</button>
+        </div>
+        <form className="auth-form" onSubmit={submit}>
+          <label className="auth-label">名前</label>
+          <input className="auth-input" value={name} maxLength={30} autoFocus
+            onChange={e=>setName(e.target.value)} placeholder="お名前" />
+          <label className="auth-label">パスワード</label>
+          <input className="auth-input" type="password" value={password} maxLength={100}
+            onChange={e=>setPassword(e.target.value)} placeholder="6文字以上" />
+          {err && <p className="auth-error">⚠️ {err}</p>}
+          <button className="auth-submit" type="submit" disabled={busy}>
+            {busy ? "処理中..." : (mode==="login" ? "ログイン" : "登録する")}
+          </button>
+          <p className="auth-hint">
+            {mode==="login"
+              ? "アカウントをお持ちでない場合は「新規登録」へ。"
+              : "ログイン中はお気に入りがサーバーに保存され、別の端末でも使えます。"}
+          </p>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── App メインコンポーネント ──────────────────────────
 function App() {
   // 入力 useState
@@ -431,27 +486,93 @@ function App() {
   // タブ
   const [activeTab, setActiveTab] = useState("proposal");
 
+  // 認証
+  const [user, setUser] = useState(null);        // null=ゲスト / {name}
+  const [authOpen, setAuthOpen] = useState(false);
+  const favReadyRef = useRef(false);             // 初期復元が完了するまで保存しない
+
   // トースト
   const {toast, showToast} = useToast();
 
-  // localStorage hydrate（お気に入り）
-  useEffect(()=>{
+  // localStorage からお気に入りを復元
+  function hydrateFromLocal() {
     try {
       const colors = JSON.parse(localStorage.getItem("iroha-fav-colors")||"[]");
       const fonts  = JSON.parse(localStorage.getItem("iroha-fav-fonts")||"[]");
-      const selColorId = colors[0]?.id || null;
-      const selFontId  = fonts[0]?.id  || null;
-      favDispatch({type:"HYDRATE", payload:{colors,fonts,selColorId,selFontId}});
+      favDispatch({type:"HYDRATE", payload:{
+        colors, fonts,
+        selColorId: colors[0]?.id || null,
+        selFontId:  fonts[0]?.id  || null,
+      }});
     } catch{}
+  }
+
+  // サーバーのお気に入りを反映
+  function hydrateFavorites(fav) {
+    const colors = fav?.colors || [];
+    const fonts  = fav?.fonts  || [];
+    favDispatch({type:"HYDRATE", payload:{
+      colors, fonts,
+      selColorId: colors[0]?.id || null,
+      selFontId:  fonts[0]?.id  || null,
+    }});
+  }
+
+  // 起動時：セッション復元 → ログイン中ならサーバー、未ログインなら localStorage
+  useEffect(()=>{
+    (async()=>{
+      try {
+        const me = await authMe();
+        if (me) {
+          setUser({name: me.name});
+          hydrateFavorites(me.favorites);
+        } else {
+          hydrateFromLocal();
+        }
+      } catch {
+        hydrateFromLocal();
+      } finally {
+        favReadyRef.current = true;
+      }
+    })();
   },[]);
 
-  // localStorage 保存
+  // お気に入り保存：ログイン中＝サーバー / ゲスト＝localStorage
   useEffect(()=>{
-    localStorage.setItem("iroha-fav-colors", JSON.stringify(favState.colors));
-  },[favState.colors]);
-  useEffect(()=>{
-    localStorage.setItem("iroha-fav-fonts", JSON.stringify(favState.fonts));
-  },[favState.fonts]);
+    if (!favReadyRef.current) return;
+    if (user) {
+      favSave(favState.colors, favState.fonts).catch(()=>{
+        showToast("お気に入りの保存に失敗しました");
+      });
+    } else {
+      localStorage.setItem("iroha-fav-colors", JSON.stringify(favState.colors));
+      localStorage.setItem("iroha-fav-fonts", JSON.stringify(favState.fonts));
+    }
+  },[favState.colors, favState.fonts, user]);
+
+  // ログイン／新規登録（AuthModal から呼ばれる。失敗時は throw）
+  async function handleAuth(mode, name, password) {
+    // ゲストのお気に入りをマージ用に渡す（ログイン中の再ログインは無いが念のため空）
+    const localFav = user ? {colors:[],fonts:[]} : {colors:favState.colors, fonts:favState.fonts};
+    const fn = mode==="login" ? authLogin : authRegister;
+    const data = await fn(name, password, localFav);
+    setUser({name: data.name});
+    hydrateFavorites(data.favorites);
+    setAuthOpen(false);
+    showToast(mode==="login" ? "ログインしました" : "登録しました");
+  }
+
+  // ログアウト
+  async function handleLogout() {
+    // ★ セッション破棄前に最新のお気に入りを確定保存（削除直後のログアウトで取りこぼさない）
+    if (user) {
+      try { await favSave(favState.colors, favState.fonts); } catch{}
+    }
+    try { await authLogout(); } catch{}
+    setUser(null);
+    hydrateFromLocal();
+    showToast("ログアウトしました");
+  }
 
   // 選択中案のCSS変数適用
   useEffect(()=>{
@@ -485,6 +606,16 @@ function App() {
           <div className="logo-dot" />
         </div>
         <span className="header-tagline">AI 配色 & タイポジェネレーター</span>
+        <div className="header-auth">
+          {user ? (
+            <>
+              <span className="header-user">{user.name} さん</span>
+              <button className="header-auth-btn" onClick={handleLogout}>ログアウト</button>
+            </>
+          ) : (
+            <button className="header-auth-btn" onClick={()=>setAuthOpen(true)}>ログイン</button>
+          )}
+        </div>
       </header>
 
       {/* ── メインレイアウト ── */}
@@ -735,6 +866,11 @@ function App() {
           </div>
         </main>
       </div>
+
+      {/* ── ログインモーダル ── */}
+      {authOpen && (
+        <AuthModal onClose={()=>setAuthOpen(false)} onAuth={handleAuth} />
+      )}
 
       {/* ── トースト ── */}
       <div className={`toast${toast.show?"":" out"}`}>{toast.msg}</div>

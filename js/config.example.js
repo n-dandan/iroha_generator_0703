@@ -8,4 +8,8 @@
 window.IROHA_CONFIG = {
   // 配色＆フォント提案エンドポイント（PHPバックエンド）
   API_URL: "api/generate.php",
+  // ログイン・認証エンドポイント
+  AUTH_URL: "api/auth.php",
+  // お気に入り保存・読込エンドポイント（要ログイン）
+  FAV_URL: "api/favorites.php",
 };

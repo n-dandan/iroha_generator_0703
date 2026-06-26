@@ -7,7 +7,7 @@
 // ── config.js から取得 ───────────────────────────────
 // APIキー・プロンプト・スキーマはすべてバックエンド（api/generate.php）側に隠蔽。
 // フロントは API_URL に入力値を POST するだけ。
-const { API_URL } = window.IROHA_CONFIG;
+const { API_URL, AUTH_URL, FAV_URL } = window.IROHA_CONFIG;
 const FONT_LIST = window.FONT_LIST;
 
 // ── 定数 ─────────────────────────────────────────────
@@ -204,6 +204,59 @@ async function generate(input) {
     };
   });
   return proposals;
+}
+
+// ── 認証・お気に入りAPI（同一オリジン・Cookieセッション） ──
+// すべて {ok, data|error} 規約。失敗時は error.message を throw。
+async function postJSON(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  let json = null;
+  try { json = await res.json(); } catch {}
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error?.message || `APIエラー HTTP ${res.status}`);
+  }
+  return json.data;
+}
+
+// 現在のログイン状態を取得。{name, favorites} or null
+async function authMe() {
+  const data = await postJSON(AUTH_URL, { action: "me" });
+  return data?.user === null ? null : data;
+}
+
+// 新規登録。localFav={colors,fonts} をマージ。{name, favorites} を返す
+async function authRegister(name, password, localFav) {
+  return await postJSON(AUTH_URL, { action: "register", name, password, localFavorites: localFav });
+}
+
+// ログイン。localFav をサーバーにマージ。{name, favorites} を返す
+async function authLogin(name, password, localFav) {
+  return await postJSON(AUTH_URL, { action: "login", name, password, localFavorites: localFav });
+}
+
+async function authLogout() {
+  return await postJSON(AUTH_URL, { action: "logout" });
+}
+
+// お気に入りをサーバーから読込。{colors, fonts}
+async function favLoad() {
+  const res = await fetch(FAV_URL, { method: "GET", credentials: "same-origin" });
+  let json = null;
+  try { json = await res.json(); } catch {}
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error?.message || `APIエラー HTTP ${res.status}`);
+  }
+  return json.data;
+}
+
+// お気に入りをサーバーへ保存。保存後の {colors, fonts} を返す
+async function favSave(colors, fonts) {
+  return await postJSON(FAV_URL, { colors, fonts });
 }
 
 // ── 定型文プロンプト生成（AI不使用） ─────────────────

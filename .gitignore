@@ -2,6 +2,9 @@
 api/config.php
 js/config.js
 
+# ユーザーデータ（パスワードハッシュ・お気に入り。コミットしない）
+data/
+
 # OS・エディタ生成ファイル
 .DS_Store
 Thumbs.db
