@@ -44,14 +44,35 @@ AIへの指示から配色とフォントペアを提案するデザインジェ
 ## （６）構成
 
 ```
-iroha_0623/
-├── index.html          エントリポイント・スクリプト読み込み順を管理
-├── style.css           デザインシステム（CSS変数・ニューモーフィズム・レスポンシブ）
-├── readme              本ファイル
-└── js/
-    ├── config.js       APIキー設定（Git管理外 / .gitignore）
-    ├── config.example.js  キー空の雛形（Git管理）
-    ├── font-list.js    固定フォントリスト（window.FONT_LIST）
-    ├── logic.js        ロジック層：定数・色ユーティリティ・Gemini API呼び出し・Reducer
-    └── app.js          UI層：Reactコンポーネント（JSX）
+iroha_generator/
+├── index.html              エントリポイント・スクリプト読み込み順を管理
+├── style.css               デザインシステム（CSS変数・ニューモーフィズム・レスポンシブ）
+├── readme                  本ファイル
+├── spec_0626.md            仕様書
+├── robots.txt              クローラー拒否（テスト公開中の検索エンジン除け）
+├── .htaccess               ルート：X-Robots-Tag による noindex 付与
+├── .gitignore              APIキー・ユーザーデータを除外
+│
+├── js/                     ── フロントエンド ──
+│   ├── config.js           エンドポイントURL設定（Git管理外 / .gitignore）
+│   ├── config.example.js   雛形（Git管理）
+│   ├── font-list.js        固定フォントリスト（window.FONT_LIST）
+│   ├── logic.js            ロジック層：定数・色ユーティリティ・API呼び出し・Reducer
+│   └── app.js              UI層：Reactコンポーネント（JSX）
+│
+├── api/                    ── PHPバックエンド ──
+│   ├── .htaccess           インクルード専用ファイルの直接アクセス遮断
+│   ├── config.php          APIキー・設定（Git管理外 / .gitignore）
+│   ├── config.example.php  雛形（Git管理）
+│   ├── cors.php            CORS・共通初期化・例外ハンドラ
+│   ├── helpers.php         共通ユーティリティ（レスポンス・cURL・検証・レート制限）
+│   ├── font-catalog.php    プロンプト用フォントカタログ（family/subset/category）
+│   ├── generate.php        配色＆フォント提案エンドポイント（Gemini呼び出し）
+│   ├── auth.php            認証エンドポイント（register / login / logout / me）
+│   └── store.php           ユーザー・お気に入りのファイル保存／セッション
+│
+└── data/                   ── ユーザーデータ（Git管理外 / HTTP直アクセス遮断） ──
+    ├── .htaccess           Require all denied
+    ├── users.json          ユーザー（名前 → bcryptハッシュ）
+    └── favorites/          ユーザーごとのお気に入り（<md5(名前)>.json）
 ```
