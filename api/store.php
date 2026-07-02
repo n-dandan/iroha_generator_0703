@@ -1,12 +1,11 @@
 <?php
 // =====================================================
-// api/store.php — ユーザー／お気に入りのファイル保存・セッション
+// api/store.php — ユーザー／お気に入りのDB保存・セッション
 // require 専用モジュール（cors.php / helpers.php の後に読み込む）
 // =====================================================
 
-const DATA_DIR = __DIR__ . '/../data';
-const USERS_FILE = DATA_DIR . '/users.json';
-const FAV_DIR = DATA_DIR . '/favorites';
+require __DIR__ . '/db.php';
+
 const FAV_MAX = 10; // 各リストの保存上限（フロント favReducer と一致）
 
 // ---- セッション ----
@@ -34,81 +33,104 @@ function require_login(): string {
     return $u;
 }
 
-// ---- 内部：JSON ファイル読み書き（flock） ----
-
-function _ensure_data_dir(): void {
-    if (!is_dir(DATA_DIR)) @mkdir(DATA_DIR, 0700, true);
-    if (!is_dir(FAV_DIR))  @mkdir(FAV_DIR, 0700, true);
-}
-
-function _read_json(string $file): array {
-    if (!is_file($file)) return [];
-    $content = @file_get_contents($file);
-    if ($content === false || $content === '') return [];
-    $data = json_decode($content, true);
-    return is_array($data) ? $data : [];
-}
-
-function _write_json(string $file, array $data): void {
-    _ensure_data_dir();
-    $fp = @fopen($file, 'c+');
-    if (!$fp) {
-        json_error('INTERNAL_ERROR', 'データの保存に失敗しました。', 500);
-    }
-    flock($fp, LOCK_EX);
-    ftruncate($fp, 0);
-    rewind($fp);
-    fwrite($fp, json_encode($data, JSON_UNESCAPED_UNICODE));
-    fflush($fp);
-    flock($fp, LOCK_UN);
-    fclose($fp);
-}
-
 // ---- ユーザー ----
 
 function _user_key(string $name): string {
     return mb_strtolower(trim($name));
 }
 
-function users_load(): array {
-    return _read_json(USERS_FILE);
-}
-
 function user_find(string $name): ?array {
-    $users = users_load();
-    return $users[_user_key($name)] ?? null;
+    $stmt = db()->prepare('SELECT name, password_hash, created_at FROM users WHERE name_key = ?');
+    $stmt->execute([_user_key($name)]);
+    $row = $stmt->fetch();
+    if ($row === false) return null;
+    $row['created_at'] = (int) $row['created_at'];
+    return $row;
 }
 
 function user_create(string $name, string $passwordHash): void {
-    $users = users_load();
-    $users[_user_key($name)] = [
-        'name'          => trim($name),
-        'password_hash' => $passwordHash,
-        'created_at'    => time(),
-    ];
-    _write_json(USERS_FILE, $users);
+    $stmt = db()->prepare('INSERT INTO users (name, name_key, password_hash, created_at) VALUES (?, ?, ?, ?)');
+    try {
+        $stmt->execute([trim($name), _user_key($name), $passwordHash, time()]);
+    } catch (PDOException $e) {
+        if ($e->getCode() === '23000') {
+            json_error('NAME_TAKEN', 'この名前はすでに使われています。', 409);
+        }
+        throw $e;
+    }
+}
+
+function _user_id(string $name): ?int {
+    $stmt = db()->prepare('SELECT id FROM users WHERE name_key = ?');
+    $stmt->execute([_user_key($name)]);
+    $id = $stmt->fetchColumn();
+    return $id === false ? null : (int) $id;
 }
 
 // ---- お気に入り ----
 
-function fav_path(string $name): string {
-    return FAV_DIR . '/' . md5(_user_key($name)) . '.json';
-}
-
 function fav_load(string $name): array {
-    $data = _read_json(fav_path($name));
-    return [
-        'colors' => isset($data['colors']) && is_array($data['colors']) ? $data['colors'] : [],
-        'fonts'  => isset($data['fonts'])  && is_array($data['fonts'])  ? $data['fonts']  : [],
-    ];
+    $uid = _user_id($name);
+    $colors = [];
+    $fonts = [];
+    if ($uid === null) {
+        return ['colors' => $colors, 'fonts' => $fonts];
+    }
+
+    $stmt = db()->prepare('SELECT kind, payload FROM favorites WHERE user_id = ? ORDER BY kind, position ASC');
+    $stmt->execute([$uid]);
+    foreach ($stmt as $row) {
+        $item = json_decode($row['payload'], true);
+        if (!is_array($item)) continue;
+        if ($row['kind'] === 'color') {
+            $colors[] = $item;
+        } else {
+            $fonts[] = $item;
+        }
+    }
+
+    return ['colors' => $colors, 'fonts' => $fonts];
 }
 
 function fav_save(string $name, array $colors, array $fonts): array {
     $colors = array_slice(array_values($colors), 0, FAV_MAX);
     $fonts  = array_slice(array_values($fonts),  0, FAV_MAX);
-    $data = ['colors' => $colors, 'fonts' => $fonts];
-    _write_json(fav_path($name), $data);
-    return $data;
+
+    $uid = _user_id($name);
+    if ($uid === null) {
+        json_error('UNAUTHORIZED', 'ログインが必要です。', 401);
+    }
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $del = $pdo->prepare('DELETE FROM favorites WHERE user_id = ? AND kind = ?');
+        $ins = $pdo->prepare(
+            'INSERT INTO favorites (user_id, kind, item_id, payload, position, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+        );
+        $now = time();
+
+        foreach (['color' => $colors, 'font' => $fonts] as $kind => $list) {
+            $del->execute([$uid, $kind]);
+            foreach (array_values($list) as $i => $item) {
+                $ins->execute([
+                    $uid,
+                    $kind,
+                    (string) ($item['id'] ?? ''),
+                    json_encode($item, JSON_UNESCAPED_UNICODE),
+                    $i,
+                    $now,
+                ]);
+            }
+        }
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+
+    return ['colors' => $colors, 'fonts' => $fonts];
 }
 
 // ---- マージ（ゲスト → アカウント） ----

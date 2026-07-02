@@ -18,4 +18,13 @@ return [
 
     // レート制限（IPアドレスごと）
     'rate_limit' => ['limit' => 10, 'window' => 60],  // 10回/分
+
+    // データベース接続（ユーザー／お気に入り）
+    'db' => [
+        'host'    => '127.0.0.1',
+        'name'    => 'iroha_generator',
+        'user'    => 'root',
+        'pass'    => '',
+        'charset' => 'utf8mb4',
+    ],
 ];
